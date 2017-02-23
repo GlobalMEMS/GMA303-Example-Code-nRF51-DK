@@ -36,6 +36,7 @@
  
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include "nrf_drv_clock.h"
 #include "nrf_delay.h"
 #include "nrf_soc.h"
@@ -52,6 +53,7 @@
 #define UART_RX_BUF_SIZE            1                    // UART RX buffer size
 #define MAX_PENDING_TRANSACTIONS    5                    // TWI (I2C)
 #define DELAY_MS(ms)	            nrf_delay_ms(ms)
+#define RADIAN_TO_DEGREE            (180. / 3.14159265358979323846) //1 radian = 180/pi degree
 
 static app_twi_t m_app_twi = APP_TWI_INSTANCE(0);
 static uint8_t ui8StartAutoNilFlag = 0;
@@ -154,6 +156,8 @@ int main(void)
   bus_support_t gma303_bus;
   raw_data_xyzt_t rawData;
   raw_data_xyzt_t offsetData;
+  raw_data_xyzt_t calibData;
+  float fTilt_degree;
 
   //Config and initialize LFCLK
   init_lfclk();
@@ -193,9 +197,21 @@ int main(void)
       /* Read XYZT data */
       gma303_read_data_xyzt(&rawData);
 
-      printf("Raw_XYZT=%d,%d,%d,%d\n", rawData.u.x, rawData.u.y, rawData.u.z, rawData.u.t);
-			
-      printf("Calib_XYZ=%d,%d,%d\n", rawData.u.x - offsetData.u.x, rawData.u.y - offsetData.u.y, rawData.u.z - offsetData.u.z);
+      //Offset compensation
+      calibData.u.x = rawData.u.x - offsetData.u.x;
+      calibData.u.y = rawData.u.y - offsetData.u.y;
+      calibData.u.z = rawData.u.z - offsetData.u.z;
+
+      //Tilt angle
+      fTilt_degree = acos(calibData.u.z
+			  / sqrt(calibData.u.x*calibData.u.x + calibData.u.y*calibData.u.y + calibData.u.z*calibData.u.z)
+			  ) * RADIAN_TO_DEGREE;
+ 
+      printf("Raw_XYZT=%d,%d,%d,%d\n", rawData.u.x, rawData.u.y, rawData.u.z, rawData.u.t);			
+      printf("Calib_XYZ=%d,%d,%d\n", calibData.u.x, calibData.u.y, calibData.u.z);
+      printf("Tilt=%d.%dDeg\n",
+	     (s32)fTilt_degree,
+	     abs((s32)((fTilt_degree - (s32)fTilt_degree)*100)));
 
       /* Delay 1 sec */
       DELAY_MS(1000);
